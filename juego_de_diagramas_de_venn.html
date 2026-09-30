@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Juego de Diagramas de Venn</title>
+  <link
+    rel="stylesheet"
+    href="https://cdn.jsdelivr.net/npm/@stlite/mountable@0.59.0/build/stlite.css"
+  />
+</head>
+<body>
+  <div id="root"></div>
+  <script src="https://cdn.jsdelivr.net/npm/@stlite/mountable@0.59.0/build/stlite.js"></script>
+  <script>
+    stlite.mount(
+      {
+        requirements: ["matplotlib", "matplotlib-venn"],
+        entrypoint: "app.py",
+        files: {
+          "app.py": `import streamlit as st
+import matplotlib.pyplot as plt
+from matplotlib_venn import venn2, venn3
+
+# Configuración de la página
+st.set_page_config(
+    page_title="Juego de Diagramas de Venn",
+    page_icon="⭕",
+    layout="wide"
+)
+
+# Estilo personalizado
+st.markdown("""
+<style>
+    .big-font { font-size:20px !important; font-weight: bold; }
+    .stButton>button { width: 100%; border-radius: 8px; }
+</style>
+""", unsafe_allow_html=True)
+
+st.title("⭕ Juego Interactivo: Diagramas de Venn")
+
+# Estado de la sesión
+if "score" not in st.session_state:
+    st.session_state.score = 0
+if "level" not in st.session_state:
+    st.session_state.level = 0
+if "streak" not in st.session_state:
+    st.session_state.streak = 0
+
+LEVELS = [
+    {
+        "type": 2,
+        "title": "Nivel 1: Números de 1 a 12",
+        "set_a_name": "Números Pares",
+        "set_b_name": "Mayores que 6",
+        "elements": [
+            {"val": "2", "correct": "Solo A"},
+            {"val": "4", "correct": "Solo A"},
+            {"val": "8", "correct": "Intersección (A y B)"},
+            {"val": "10", "correct": "Intersección (A y B)"},
+            {"val": "7", "correct": "Solo B"},
+            {"val": "9", "correct": "Solo B"},
+            {"val": "3", "correct": "Fuera de los conjuntos"},
+            {"val": "5", "correct": "Fuera de los conjuntos"}
+        ]
+    },
+    {
+        "type": 2,
+        "title": "Nivel 2: Animales",
+        "set_a_name": "Mamíferos",
+        "set_b_name": "Pueden Volar",
+        "elements": [
+            {"val": "Perro", "correct": "Solo A"},
+            {"val": "Gato", "correct": "Solo A"},
+            {"val": "Murciélago", "correct": "Intersección (A y B)"},
+            {"val": "Águila", "correct": "Solo B"},
+            {"val": "Mosca", "correct": "Solo B"},
+            {"val": "Tiburón", "correct": "Fuera de los conjuntos"}
+        ]
+    }
+]
+
+# Menú lateral
+menu = st.sidebar.radio("Modo de Juego", ["🎮 Modo Clasificación", "🧠 Reto de Lógica de Conjuntos", "🎨 Creador Sandbox"])
+
+st.sidebar.markdown("---")
+st.sidebar.metric("Puntuación", st.session_state.score)
+st.sidebar.metric("Racha de Aciertos", st.session_state.streak)
+
+# MODO 1: CLASIFICACIÓN
+if menu == "🎮 Modo Clasificación":
+    current_lvl = LEVELS[st.session_state.level % len(LEVELS)]
+    st.subheader(current_lvl["title"])
+    
+    col1, col2 = st.columns([1, 1])
+
+    with col1:
+        st.write(f"**Conjunto A:** {current_lvl['set_a_name']}")
+        st.write(f"**Conjunto B:** {current_lvl['set_b_name']}")
+        
+        fig, ax = plt.subplots(figsize=(6, 5))
+        v = venn2(
+            subsets=(3, 3, 2),
+            set_labels=(current_lvl['set_a_name'], current_lvl['set_b_name']),
+            ax=ax
+        )
+        if v.get_label_by_id('10'): v.get_label_by_id('10').set_text('Solo A')
+        if v.get_label_by_id('01'): v.get_label_by_id('01').set_text('Solo B')
+        if v.get_label_by_id('11'): v.get_label_by_id('11').set_text('A ∩ B')
+        plt.title("Estructura del Diagrama")
+        st.pyplot(fig)
+
+    with col2:
+        st.markdown("### Clasifica los siguientes elementos:")
+        
+        answers = {}
+        regions = ["Solo A", "Solo B", "Intersección (A y B)", "Fuera de los conjuntos"]
+        
+        with st.form(f"quiz_form_{st.session_state.level}"):
+            for idx, elem in enumerate(current_lvl["elements"]):
+                answers[elem["val"]] = st.selectbox(
+                    f"¿Dónde va el elemento **'{elem['val']}'**?",
+                    options=regions,
+                    key=f"elem_{st.session_state.level}_{idx}"
+                )
+            
+            submitted = st.form_submit_button("Verificar Respuestas")
+        
+        if submitted:
+            correct_count = 0
+            total = len(current_lvl["elements"])
+            
+            for elem in current_lvl["elements"]:
+                user_ans = answers[elem["val"]]
+                if user_ans == elem["correct"]:
+                    correct_count += 1
+                    st.markdown(f"✅ **{elem['val']}**: ¡Correcto! ({elem['correct']})")
+                else:
+                    st.markdown(f"❌ **{elem['val']}**: Incorrecto. Era **{elem['correct']}**.")
+            
+            if correct_count == total:
+                st.balloons()
+                st.success("🎉 ¡Excelente! Has clasificado todos los elementos correctamente.")
+                st.session_state.score += 100
+                st.session_state.streak += 1
+            else:
+                st.error(f"Puntuación: {correct_count}/{total}. ¡Inténtalo de nuevo!")
+                st.session_state.streak = 0
+
+        if st.button("Siguiente Nivel ➡️"):
+            st.session_state.level += 1
+            st.rerun()
+
+# MODO 2: RETO DE LÓGICA
+elif menu == "🧠 Reto de Lógica de Conjuntos":
+    st.subheader("Selecciona la región que corresponde a la operación de conjuntos")
+    
+    questions = [
+        {"q": "A ∩ B (Intersección de A y B)", "ans": "A y B (Intersección)"},
+        {"q": "A \\\\ B (Diferencia: Elementos que están solo en A pero no en B)", "ans": "Solo A"},
+        {"q": "(A ∪ B)' (Complemento: Elementos fuera de A y B)", "ans": "Fuera de A y B"},
+        {"q": "A ∪ B (Unión de A y B)", "ans": "Todo dentro de A o B"}
+    ]
+    
+    q_idx = st.number_input("Selecciona la Pregunta #", min_value=1, max_value=len(questions), step=1) - 1
+    current_q = questions[q_idx]
+    
+    st.markdown(f"### Pregunta: ¿Qué zona representa **{current_q['q']}**?")
+    
+    fig, ax = plt.subplots(figsize=(6, 5))
+    v = venn2(subsets=(1, 1, 1), set_labels=('Conjunto A', 'Conjunto B'), ax=ax)
+    st.pyplot(fig)
+    
+    user_choice = st.radio(
+        "Elige la zona correcta:",
+        ["Solo A", "Solo B", "A y B (Intersección)", "Todo dentro de A o B", "Fuera de A y B"]
+    )
+    
+    if st.button("Comprobar Respuesta"):
+        if user_choice == current_q["ans"]:
+            st.success("🎯 ¡Correcto! Es la representación adecuada.")
+            st.session_state.score += 50
+        else:
+            st.error(f"❌ No es correcto. La respuesta exacta es: {current_q['ans']}")
+
+# MODO 3: CREADOR SANDBOX
+elif menu == "🎨 Creador Sandbox":
+    st.subheader("Crea tu propio Diagrama de Venn")
+    
+    num_circles = st.radio("Número de conjuntos:", [2, 3])
+    
+    col_a, col_b = st.columns(2)
+    
+    if num_circles == 2:
+        with col_a:
+            name_a = st.text_input("Nombre del Conjunto A:", "Frutas")
+            items_a = st.text_area("Elementos de A (separados por comas):", "Manzana, Banana, Fresa, Uva")
+        with col_b:
+            name_b = st.text_input("Nombre del Conjunto B:", "Roja/Rojo")
+            items_b = st.text_area("Elementos de B (separados por comas):", "Fresa, Manzana, Tomate, Coche")
+            
+        set_a = set([x.strip() for x in items_a.split(",") if x.strip()])
+        set_b = set([x.strip() for x in items_b.split(",") if x.strip()])
+        
+        only_a = set_a - set_b
+        only_b = set_b - set_a
+        inter = set_a & set_b
+        
+        fig, ax = plt.subplots(figsize=(7, 6))
+        v = venn2(subsets=(len(only_a), len(only_b), len(inter)), set_labels=(name_a, name_b), ax=ax)
+        
+        if v.get_label_by_id('10'): v.get_label_by_id('10').set_text("\\n".join(only_a))
+        if v.get_label_by_id('01'): v.get_label_by_id('01').set_text("\\n".join(only_b))
+        if v.get_label_by_id('11'): v.get_label_by_id('11').set_text("\\n".join(inter))
+        
+        st.pyplot(fig)
+        
+    else:
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            name_a = st.text_input("Conjunto A:", "Pares")
+            items_a = st.text_area("Elementos A:", "2, 4, 6, 8, 12, 24", key="s_a")
+        with col2:
+            name_b = st.text_input("Conjunto B:", "Múltiplos de 3")
+            items_b = st.text_area("Elementos B:", "3, 6, 9, 12, 24", key="s_b")
+        with col3:
+            name_c = st.text_input("Conjunto C:", "Mayores de 10")
+            items_c = st.text_area("Elementos C:", "11, 12, 15, 24", key="s_c")
+            
+        sa = set([x.strip() for x in items_a.split(",") if x.strip()])
+        sb = set([x.strip() for x in items_b.split(",") if x.strip()])
+        sc = set([x.strip() for x in items_c.split(",") if x.strip()])
+        
+        fig, ax = plt.subplots(figsize=(8, 7))
+        v = venn3([sa, sb, sc], set_labels=(name_a, name_b, name_c), ax=ax)
+        st.pyplot(fig)
+`
+        },
+      },
+      document.getElementById("root")
+    );
+  </script>
+</body>
+</html>
